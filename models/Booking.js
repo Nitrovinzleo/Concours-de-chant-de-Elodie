@@ -25,6 +25,10 @@ const bookingSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
+  selectedSeats: [{
+    type: String,
+    required: false
+  }],
   confirmationCode: {
     type: String,
     unique: true,

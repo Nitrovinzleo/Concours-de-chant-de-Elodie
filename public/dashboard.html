@@ -64,6 +64,74 @@
         .seat-limited { background-color: var(--color-accent); }
         .seat-full { background-color: var(--color-danger); }
 
+        /* Seat Map Styles */
+        .seat-map-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+        }
+        
+        .seat-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            justify-content: center;
+        }
+        
+        .row-label {
+            width: 30px;
+            text-align: center;
+            font-weight: bold;
+            margin-right: 10px;
+            color: var(--color-text-main);
+        }
+        
+        .seat {
+            width: 35px;
+            height: 35px;
+            margin: 2px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+            color: white;
+        }
+        
+        .seat.available {
+            background: linear-gradient(135deg, #10B981, #059669);
+            border-color: #047857;
+        }
+        
+        .seat.available:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+        
+        .seat.selected {
+            background: linear-gradient(135deg, #F59E0B, #D97706);
+            border-color: #B45309;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .seat.booked {
+            background: linear-gradient(135deg, #EF4444, #DC2626);
+            border-color: #B91C1C;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
         .navbar {
             background-color: var(--color-primary) !important;
             border-bottom: 1px solid rgba(55, 31, 105, 0.6);
@@ -289,6 +357,72 @@
         </div>
     </div>
 
+    <!-- Seat Selection Modal -->
+    <div class="modal fade" id="seatSelectionModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-chair"></i> Sélectionnez vos places
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <h6 id="seatEventTitle"></h6>
+                            <p class="text-muted">Cliquez sur les places pour les sélectionner</p>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h6 class="card-title">Résumé</h6>
+                                    <p>Places sélectionnées: <span id="selectedCount" class="badge bg-primary">0</span></p>
+                                    <p>Total: <span id="totalPrice">0€</span></p>
+                                    <button class="btn btn-success w-100" onclick="app.confirmSeatSelection()">
+                                        Confirmer la réservation
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Stage -->
+                    <div class="text-center mb-4">
+                        <div class="bg-dark text-white py-2 px-4 rounded" style="display: inline-block;">
+                            <i class="fas fa-music"></i> SCÈNE
+                        </div>
+                    </div>
+                    
+                    <!-- Seat Map -->
+                    <div id="seatMap" class="seat-map-container">
+                        <!-- Seats will be generated here -->
+                    </div>
+                    
+                    <!-- Legend -->
+                    <div class="row mt-4">
+                        <div class="col-md-12">
+                            <div class="d-flex justify-content-center gap-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="seat available me-2"></div>
+                                    <span>Disponible</span>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <div class="seat selected me-2"></div>
+                                    <span>Sélectionné</span>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <div class="seat booked me-2"></div>
+                                    <span>Réservé</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="notificationToast" class="notification-toast toast" role="alert">
         <div class="toast-header">
@@ -307,6 +441,7 @@
                 this.user = JSON.parse(localStorage.getItem('user') || '{}');
                 this.socket = null;
                 this.currentEvents = [];
+                this.selectedSeats = [];
                 
                 if (!this.token) {
                     window.location.href = '/';
@@ -345,6 +480,11 @@
                 this.socket.on('seat-update', (data) => {
                     this.updateEventSeats(data.eventId, data.availableSeats);
                     this.loadStats();
+                    
+                    // Si le modal de sélection est ouvert pour cet événement, mettre à jour la carte
+                    if (this.currentEventId == data.eventId) {
+                        this.generateSeatMap(96, data.availableSeats);
+                    }
                 });
 
                 this.socket.on('booking-confirmed', (data) => {
@@ -352,6 +492,11 @@
                         this.showNotification('Votre réservation a été confirmée!', 'success');
                         this.loadEvents();
                         this.loadStats();
+                    }
+                    
+                    // Si le modal de sélection est ouvert pour cet événement, mettre à jour la carte
+                    if (this.currentEventId == data.eventId) {
+                        this.generateSeatMap(96, 96 - (data.seats ? data.seats.length : 1));
                     }
                 });
             }
@@ -450,9 +595,9 @@
                                     
                                     <div class="d-grid gap-2">
                                         <button class="btn ${isFull ? 'btn-secondary' : 'btn-primary'}" 
-                                                onclick="app.bookEvent('${event._id}')"
-                                                ${isFull ? 'disabled' : ''}>
-                                            ${isFull ? 'Complet' : 'Réserver'}
+                                                onclick="app.openSeatSelection('${event._id}', '${event.title}', ${event.availableSeats}, ${event.capacity}, ${event.price || 0})"
+                                                ${isFull ? '' : ''}>
+                                            ${isFull ? 'Voir la liste d\'attente' : 'Choisir mes places'}
                                         </button>
                                     </div>
                                 </div>
@@ -485,7 +630,53 @@
                 return labels[category] || category;
             }
 
-            async bookEvent(eventId) {
+            openSeatSelection(eventId, eventTitle, availableSeats, capacity, price) {
+                this.currentEventId = eventId;
+                this.currentEventPrice = price;
+                this.selectedSeats = [];
+                
+                document.getElementById('seatEventTitle').textContent = eventTitle;
+                
+                if (availableSeats === 0) {
+                    // Événement complet - afficher la liste d'attente
+                    this.showWaitlistView(eventTitle);
+                } else {
+                    // Places disponibles - afficher la sélection de places
+                    this.generateSeatMap(capacity, availableSeats);
+                }
+                
+                const modal = new bootstrap.Modal(document.getElementById('seatSelectionModal'));
+                modal.show();
+            }
+
+            showWaitlistView(eventTitle) {
+                const seatMap = document.getElementById('seatMap');
+                seatMap.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-4x text-warning mb-3"></i>
+                        <h4>Cet événement est complet</h4>
+                        <p class="text-muted">Mais vous pouvez rejoindre la liste d'attente!</p>
+                        <div class="card mt-4">
+                            <div class="card-body">
+                                <h6 class="card-title">Comment fonctionne la liste d'attente?</h6>
+                                <p class="card-text">
+                                    • Vous serez automatiquement notifié si une place se libère<br>
+                                    • Les places sont attribuées dans l'ordre d'inscription<br>
+                                    • Vous aurez 24h pour confirmer votre réservation
+                                </p>
+                                <button class="btn btn-warning w-100" onclick="app.joinWaitlist()">
+                                    <i class="fas fa-clock"></i> Rejoindre la liste d'attente
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Cacher le résumé de sélection
+                document.querySelector('.seat-map-container').nextElementSibling.style.display = 'none';
+            }
+
+            async joinWaitlist() {
                 try {
                     const response = await fetch('/api/bookings', {
                         method: 'POST',
@@ -493,7 +684,191 @@
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${this.token}`
                         },
-                        body: JSON.stringify({ eventId })
+                        body: JSON.stringify({ 
+                            eventId: this.currentEventId,
+                            numberOfSeats: 1
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        this.showNotification(`Vous êtes sur la liste d'attente! Code: ${data.confirmation}`, 'warning');
+                        bootstrap.Modal.getInstance(document.getElementById('seatSelectionModal')).hide();
+                        this.loadEvents();
+                        this.loadStats();
+                    } else {
+                        this.showNotification(data.message || 'Erreur lors de l\'inscription à la liste d\'attente', 'error');
+                    }
+                } catch (error) {
+                    console.error('Waitlist error:', error);
+                    this.showNotification('Erreur lors de l\'inscription à la liste d\'attente', 'error');
+                }
+            }
+
+            async generateSeatMap(capacity, availableSeats) {
+                const seatMap = document.getElementById('seatMap');
+                const seatsPerRow = 12;
+                const rowsNeeded = Math.ceil(capacity / seatsPerRow);
+                
+                // Récupérer les vraies données de places réservées depuis le backend
+                const bookedSeats = await this.getActualBookedSeats();
+                
+                let html = '';
+                for (let row = 1; row <= rowsNeeded; row++) {
+                    // Calculer le label de rangée (A-Z, puis AA, AB, etc.)
+                    let rowLabel;
+                    if (row <= 26) {
+                        rowLabel = String.fromCharCode(64 + row);
+                    } else {
+                        const firstLetter = String.fromCharCode(64 + Math.floor((row - 1) / 26));
+                        const secondLetter = String.fromCharCode(64 + ((row - 1) % 26) + 1);
+                        rowLabel = firstLetter + secondLetter;
+                    }
+                    
+                    html += `<div class="seat-row">`;
+                    html += `<div class="row-label">${rowLabel}</div>`;
+                    
+                    // Calculer le nombre de places dans cette rangée
+                    const seatsInThisRow = Math.min(seatsPerRow, capacity - (row - 1) * seatsPerRow);
+                    
+                    for (let seat = 1; seat <= seatsInThisRow; seat++) {
+                        const seatNumber = `${rowLabel}${seat}`;
+                        const isBooked = bookedSeats.includes(seatNumber);
+                        const isSelected = this.selectedSeats.includes(seatNumber);
+                        
+                        let seatClass = 'seat available';
+                        let seatText = seat;
+                        let onclick = `onclick="app.toggleSeat('${seatNumber}')"`;
+                        
+                        if (isBooked) {
+                            seatClass = 'seat booked';
+                            onclick = '';
+                        } else if (isSelected) {
+                            seatClass = 'seat selected';
+                        }
+                        
+                        html += `<div class="${seatClass}" ${onclick} title="${seatNumber}">${seatText}</div>`;
+                    }
+                    html += `</div>`;
+                }
+                
+                seatMap.innerHTML = html;
+                this.updateSeatSummary();
+            }
+
+            async getActualBookedSeats() {
+                try {
+                    // Chercher d'abord dans les événements déjà chargés
+                    const currentEvent = this.currentEvents.find(e => e._id == this.currentEventId);
+                    if (currentEvent && currentEvent.bookedSeats) {
+                        return currentEvent.bookedSeats;
+                    }
+                    
+                    // Sinon, faire un appel API pour obtenir les données de l'événement
+                    const response = await fetch(`/api/events/${this.currentEventId}`);
+                    if (response.ok) {
+                        const eventData = await response.json();
+                        return eventData.bookedSeats || [];
+                    }
+                } catch (error) {
+                    console.error('Error fetching booked seats:', error);
+                }
+                
+                // En cas d'erreur, retourner un tableau vide
+                return [];
+            }
+
+            async toggleSeat(seatNumber) {
+                const index = this.selectedSeats.indexOf(seatNumber);
+                if (index > -1) {
+                    this.selectedSeats.splice(index, 1);
+                } else {
+                    this.selectedSeats.push(seatNumber);
+                }
+                
+                // Récupérer la capacité de l'événement actuel
+                const currentEvent = this.currentEvents.find(e => e._id == this.currentEventId);
+                const capacity = currentEvent ? currentEvent.capacity : 96;
+                
+                // Mettre à jour l'affichage avec les vraies données
+                await this.generateSeatMap(capacity, capacity - this.selectedSeats.length);
+                this.updateSeatSummary();
+            }
+
+            updateSeatSummary() {
+                document.getElementById('selectedCount').textContent = this.selectedSeats.length;
+                const total = this.selectedSeats.length * (this.currentEventPrice || 50); // Prix par défaut 50€
+                document.getElementById('totalPrice').textContent = `${total}€`;
+            }
+
+            async refreshSeatAvailability() {
+                try {
+                    // Récupérer les places réservées actuelles
+                    const currentBookedSeats = await this.getActualBookedSeats();
+                    
+                    // Vérifier si des places sélectionnées sont maintenant prises
+                    const conflictingSeats = this.selectedSeats.filter(seat => 
+                        currentBookedSeats.includes(seat)
+                    );
+                    
+                    if (conflictingSeats.length > 0) {
+                        // Retirer les places conflictuelles de la sélection
+                        this.selectedSeats = this.selectedSeats.filter(seat => 
+                            !currentBookedSeats.includes(seat)
+                        );
+                        
+                        this.showNotification(
+                            `Certaines places ne sont plus disponibles: ${conflictingSeats.join(', ')}`, 
+                            'warning'
+                        );
+                        
+                        // Mettre à jour l'affichage
+                        const currentEvent = this.currentEvents.find(e => e._id == this.currentEventId);
+                        const capacity = currentEvent ? currentEvent.capacity : 96;
+                        await this.generateSeatMap(capacity, capacity - this.selectedSeats.length);
+                    }
+                } catch (error) {
+                    console.error('Error refreshing seat availability:', error);
+                }
+            }
+
+            async confirmSeatSelection() {
+                if (this.selectedSeats.length === 0) {
+                    this.showNotification('Veuillez sélectionner au moins une place', 'error');
+                    return;
+                }
+                
+                // Vérifier si les places sont encore disponibles juste avant la réservation
+                await this.refreshSeatAvailability();
+                
+                // Fermer le modal
+                bootstrap.Modal.getInstance(document.getElementById('seatSelectionModal')).hide();
+                
+                // Procéder à la réservation
+                await this.bookEvent(this.currentEventId);
+            }
+
+            async bookEvent(eventId) {
+                try {
+                    // Si des sièges sont sélectionnés, les inclure dans la réservation
+                    const bookingData = { 
+                        eventId,
+                        numberOfSeats: this.selectedSeats.length || 1
+                    };
+                    
+                    // Ajouter les sièges sélectionnés s'il y en a
+                    if (this.selectedSeats.length > 0) {
+                        bookingData.seats = this.selectedSeats;
+                    }
+
+                    const response = await fetch('/api/bookings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify(bookingData)
                     });
 
                     const data = await response.json();
@@ -503,13 +878,27 @@
                         this.loadEvents();
                         this.loadStats();
                         
+                        // Réinitialiser les sièges sélectionnés
+                        this.selectedSeats = [];
+                        
                         if (this.socket) {
                             this.socket.emit('join-event', eventId);
                         }
                     } else {
-                        this.showNotification(data.message || 'Erreur de réservation', 'error');
+                        // Gérer les différents types d'erreurs
+                        if (data.message && data.message.includes('déjà réservée')) {
+                            this.showNotification(data.message, 'warning');
+                            // Rafraîchir la carte des places
+                            const currentEvent = this.currentEvents.find(e => e._id == eventId);
+                            if (currentEvent) {
+                                await this.generateSeatMap(currentEvent.capacity, currentEvent.availableSeats);
+                            }
+                        } else {
+                            this.showNotification(data.message || 'Erreur de réservation', 'error');
+                        }
                     }
                 } catch (error) {
+                    console.error('Booking error:', error);
                     this.showNotification('Erreur de réservation', 'error');
                 }
             }
@@ -607,6 +996,20 @@
                         this.showMyBookings();
                         this.loadEvents();
                         this.loadStats();
+                        
+                        // Si le modal de sélection de places est ouvert pour cet événement, rafraîchir la carte
+                        const seatModal = document.getElementById('seatSelectionModal');
+                        if (seatModal.classList.contains('show') && this.currentEventId) {
+                            // Récupérer les données actualisées de l'événement
+                            const eventResponse = await fetch('/api/events');
+                            if (eventResponse.ok) {
+                                const eventData = await eventResponse.json();
+                                const currentEvent = eventData.events.find(e => e._id == this.currentEventId);
+                                if (currentEvent) {
+                                    await this.generateSeatMap(96, currentEvent.availableSeats);
+                                }
+                            }
+                        }
                     } else {
                         this.showNotification(data.message || 'Erreur d\'annulation', 'error');
                     }

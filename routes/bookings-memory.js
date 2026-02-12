@@ -1,8 +1,73 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { auth } = require('../middleware/auth-memory');
+const seatService = require('../services/seatService');
 
 const router = express.Router();
+
+// GET /api/bookings?eventId=X - Récupérer les réservations pour un événement
+router.get('/event/:eventId', [auth], async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const db = req.db;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    const bookings = db.bookings.filter(b => 
+      b.event == eventId && b.status === 'confirmed'
+    );
+
+    res.json({ bookings });
+  } catch (error) {
+    console.error('Get bookings error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/', [auth], async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query;
+    const db = req.db;
+    
+    console.log('Getting bookings for user:', req.user?._id, 'with status:', status);
+    
+    let userBookings = db.bookings.filter(b => b.user == req.user._id);
+    
+    if (status) {
+      userBookings = userBookings.filter(b => b.status === status);
+    }
+    
+    console.log('Found bookings:', userBookings.length);
+    
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedBookings = userBookings.slice(startIndex, endIndex);
+
+    const bookingsWithEvents = paginatedBookings.map(booking => {
+      const event = db.events.find(e => e._id == booking.event);
+      return {
+        ...booking,
+        event: event ? {
+          title: event.title,
+          location: event.location,
+          datetime: event.datetime,
+          category: event.category
+        } : null
+      };
+    });
+
+    res.json({
+      bookings: bookingsWithEvents,
+      totalPages: Math.ceil(userBookings.length / limit),
+      currentPage: parseInt(page),
+      total: userBookings.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
 
 router.post('/', [auth], async (req, res) => {
   try {
@@ -72,65 +137,58 @@ router.post('/', [auth], async (req, res) => {
     if (seats && seats.length > 0) {
       console.log('Processing seat selection booking:', seats);
       
-      // Check if event has seat map
-      if (!event.seatMap) {
-        console.log('Event does not support seat selection');
-        return res.status(400).json({ message: 'This event does not support seat selection' });
-      }
+      // Initialiser les places pour cet événement si nécessaire
+      await seatService.initializeEventSeats(eventId, event.capacity || 96);
 
-      // Check if any seats are already booked
-      const alreadyBookedSeats = seats.filter(seat => 
-        event.bookedSeats && event.bookedSeats.some(bs => bs.seatNumber === seat)
-      );
+      // Réserver les places avec le SeatService
+      const bookingResult = await seatService.bookSeats(eventId, seats, req.user._id);
 
-      if (alreadyBookedSeats.length > 0) {
-        console.log('Seats already booked:', alreadyBookedSeats);
-        return res.status(409).json({ 
-          message: `Seats already booked: ${alreadyBookedSeats.join(', ')}` 
-        });
-      }
+      if (!bookingResult.success) {
+        console.log('Some seats could not be booked:', bookingResult.errors);
+        
+        if (bookingResult.bookedSeats.length === 0) {
+          // Aucune place n'a pu être réservée
+          return res.status(409).json({ 
+            message: `Aucune place disponible: ${bookingResult.errors.join(', ')}` 
+          });
+        } else {
+          // Certaines places ont pu être réservées, d'autres pas
+          // Pour l'instant, on annule tout et on met en liste d'attente
+          await seatService.releaseSeats(eventId, bookingResult.bookedSeats);
+          
+          const waitlistBooking = {
+            _id: db.nextBookingId++,
+            user: req.user._id,
+            event: eventId,
+            status: 'waitlist',
+            numberOfSeats: seats.length,
+            requestedSeats: seats,
+            bookingDate: new Date(),
+            confirmationCode: Math.random().toString(36).substr(2, 9).toUpperCase()
+          };
 
-      // Check if requested seats are available (not already booked by others)
-      const availableSeats = seats.filter(seat => {
-        return !event.bookedSeats || !event.bookedSeats.some(bs => bs.seatNumber === seat);
-      });
+          db.bookings.push(waitlistBooking);
 
-      if (availableSeats.length !== seats.length) {
-        console.log('Some seats are not available, adding to waitlist');
-        // Add to waitlist if some seats are not available
-        const waitlistBooking = {
-          _id: db.nextBookingId++,
-          user: req.user._id,
-          event: eventId,
-          status: 'waitlist',
-          numberOfSeats: seats.length,
-          requestedSeats: seats,
-          bookingDate: new Date(),
-          confirmationCode: Math.random().toString(36).substr(2, 9).toUpperCase()
-        };
-
-        db.bookings.push(waitlistBooking);
-
-        return res.status(201).json({
-          bookingId: waitlistBooking._id,
-          confirmation: waitlistBooking.confirmationCode,
-          status: 'waitlist',
-          requestedSeats: seats,
-          message: 'Some requested seats are no longer available. You have been added to the waitlist.'
-        });
-      }
-
-      // Calculate total price based on seat categories
-      let totalPrice = 0;
-      seats.forEach(seatNumber => {
-        const row = seatNumber.charCodeAt(0) - 64;
-        const category = event.seatMap.seatCategories.find(cat => cat.rows.includes(row));
-        if (category) {
-          totalPrice += category.price;
+          return res.status(201).json({
+            bookingId: waitlistBooking._id,
+            confirmation: waitlistBooking.confirmationCode,
+            status: 'waitlist',
+            requestedSeats: seats,
+            message: 'Certaines places demandées ne sont plus disponibles. Vous avez été ajouté à la liste d\'attente.'
+          });
         }
-      });
+      }
 
-      console.log('Creating booking with seats:', seats, 'total price:', totalPrice);
+      // Calculer le prix total basé sur les places réservées
+      let totalPrice = 0;
+      for (const seatNumber of bookingResult.bookedSeats) {
+        const seatInfo = await seatService.getSeatInfo(eventId, seatNumber);
+        if (seatInfo) {
+          totalPrice += seatInfo.price;
+        }
+      }
+
+      console.log('Creating booking with seats:', bookingResult.bookedSeats, 'total price:', totalPrice);
 
       // Create booking with specific seats
       const booking = {
@@ -138,8 +196,8 @@ router.post('/', [auth], async (req, res) => {
         user: req.user._id,
         event: eventId,
         status: 'confirmed',
-        numberOfSeats: seats.length,
-        seats: seats,
+        numberOfSeats: bookingResult.bookedSeats.length,
+        seats: bookingResult.bookedSeats,
         totalPrice: totalPrice,
         bookingDate: new Date(),
         confirmationCode: Math.random().toString(36).substr(2, 9).toUpperCase()
@@ -147,39 +205,27 @@ router.post('/', [auth], async (req, res) => {
 
       db.bookings.push(booking);
 
-      // Add seats to event's booked seats
-      if (!event.bookedSeats) {
-        event.bookedSeats = [];
-      }
-      seats.forEach(seat => {
-        event.bookedSeats.push({
-          seatNumber: seat,
-          user: req.user._id,
-          bookingDate: new Date()
-        });
-      });
-
-      event.availableSeats -= seats.length;
+      event.availableSeats -= bookingResult.bookedSeats.length;
 
       console.log('Booking created successfully:', booking._id);
 
       req.io.to(`event-${eventId}`).emit('seat-update', {
         eventId,
         availableSeats: event.availableSeats,
-        bookedSeats: event.bookedSeats
+        bookedSeats: await seatService.getBookedSeats(eventId)
       });
 
       req.io.emit('booking-confirmed', {
         bookingId: booking._id,
         eventId,
         userId: req.user._id,
-        seats: seats
+        seats: bookingResult.bookedSeats
       });
 
       return res.status(201).json({
         bookingId: booking._id,
         confirmation: booking.confirmationCode,
-        seats: seats,
+        seats: bookingResult.bookedSeats,
         totalPrice: totalPrice,
         event: {
           title: event.title,
@@ -366,20 +412,22 @@ router.put('/:id/cancel', [auth], async (req, res) => {
       if (event) {
         event.availableSeats += booking.numberOfSeats;
 
-        // Libérer les places spécifiques si elles existent
-        if (booking.seats && booking.seats.length > 0 && event.bookedSeats) {
-          booking.seats.forEach(seatNumber => {
-            const seatIndex = event.bookedSeats.findIndex(bs => bs.seatNumber === seatNumber);
-            if (seatIndex > -1) {
-              event.bookedSeats.splice(seatIndex, 1);
-            }
-          });
+        // Libérer les places spécifiques si elles existent avec le SeatService
+        if (booking.seats && booking.seats.length > 0) {
+          await seatService.initializeEventSeats(booking.event, event.capacity || 96);
+          const releaseResult = await seatService.releaseSeats(booking.event, booking.seats);
+          
+          if (releaseResult.success) {
+            console.log('Seats released successfully:', releaseResult.releasedSeats);
+          } else {
+            console.log('Some seats could not be released:', releaseResult.errors);
+          }
         }
 
         req.io.to(`event-${event._id}`).emit('seat-update', {
           eventId: event._id,
           availableSeats: event.availableSeats,
-          bookedSeats: event.bookedSeats
+          bookedSeats: await seatService.getBookedSeats(event._id)
         });
 
         // Process waitlist

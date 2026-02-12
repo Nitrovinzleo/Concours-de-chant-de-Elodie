@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { auth, adminAuth } = require('../middleware/auth-memory');
+const seatService = require('../services/seatService');
 
 const router = express.Router();
 
@@ -23,9 +24,23 @@ router.get('/', async (req, res) => {
       );
     }
 
+    // Ajouter les informations sur les places réservées pour chaque événement
+    const eventsWithBookedSeats = await Promise.all(filteredEvents.map(async (event) => {
+      // Initialiser les places pour cet événement si nécessaire
+      await seatService.initializeEventSeats(event._id, event.capacity || 96);
+      
+      // Récupérer les places réservées
+      const bookedSeats = await seatService.getBookedSeats(event._id);
+      
+      return {
+        ...event,
+        bookedSeats: bookedSeats
+      };
+    }));
+
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + parseInt(limit);
-    const paginatedEvents = filteredEvents.slice(startIndex, endIndex);
+    const paginatedEvents = eventsWithBookedSeats.slice(startIndex, endIndex);
 
     res.json({
       events: paginatedEvents,
@@ -47,7 +62,18 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Event not found' });
     }
 
-    res.json(event);
+    // Initialiser les places pour cet événement si nécessaire
+    await seatService.initializeEventSeats(event._id, event.capacity || 96);
+    
+    // Récupérer les places réservées
+    const bookedSeats = await seatService.getBookedSeats(event._id);
+
+    const eventWithBookedSeats = {
+      ...event,
+      bookedSeats: bookedSeats
+    };
+
+    res.json(eventWithBookedSeats);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

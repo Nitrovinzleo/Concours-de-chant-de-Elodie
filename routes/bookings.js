@@ -10,7 +10,8 @@ const router = express.Router();
 router.post('/', [
   auth,
   body('eventId').isMongoId(),
-  body('numberOfSeats').optional().isInt({ min: 1 })
+  body('numberOfSeats').optional().isInt({ min: 1 }),
+  body('selectedSeats').optional().isArray()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -18,7 +19,7 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { eventId, numberOfSeats = 1 } = req.body;
+    const { eventId, numberOfSeats = 1, selectedSeats = [] } = req.body;
 
     const event = await Event.findById(eventId);
     if (!event) {
@@ -40,7 +41,8 @@ router.post('/', [
         user: req.user._id,
         event: eventId,
         status: 'waitlist',
-        numberOfSeats
+        numberOfSeats,
+        selectedSeats: selectedSeats.length > 0 ? selectedSeats : undefined
       });
 
       await waitlistBooking.save();
@@ -56,17 +58,18 @@ router.post('/', [
     const existingBooking = await Booking.findOne({
       user: req.user._id,
       event: eventId,
-      status: 'confirmed'
+      status: { $in: ['confirmed', 'waitlist'] }
     });
 
     if (existingBooking) {
-      return res.status(409).json({ message: 'You already have a confirmed booking for this event' });
+      return res.status(409).json({ message: 'You already have a booking for this event' });
     }
 
     const booking = new Booking({
       user: req.user._id,
       event: eventId,
-      numberOfSeats
+      numberOfSeats,
+      selectedSeats: selectedSeats.length > 0 ? selectedSeats : undefined
     });
 
     await booking.save();
@@ -167,10 +170,11 @@ router.put('/:id/cancel', auth, async (req, res) => {
       return res.status(400).json({ message: 'Booking is already cancelled' });
     }
 
+    const wasConfirmed = booking.status === 'confirmed';
     booking.status = 'cancelled';
     await booking.save();
 
-    if (booking.status === 'confirmed') {
+    if (wasConfirmed) {
       const event = await Event.findById(booking.event);
       event.availableSeats += booking.numberOfSeats;
       await event.save();
