@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Dashboard</title>
+    <style>
+        #authSection { background: blue; color: white; padding: 20px; }
+        #dashboardSection { background: green; color: white; padding: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="authSection">
+        <h1>Section Auth</h1>
+        <button onclick="showDashboard()">Show Dashboard</button>
+    </div>
+    
+    <div id="dashboardSection">
+        <h1>Section Dashboard</h1>
+        <p>Si vous voyez ça, le dashboard fonctionne !</p>
+    </div>
+
+    <script>
+        function showDashboard() {
+            console.log('Switching to dashboard...');
+            document.getElementById('authSection').style.display = 'none';
+            document.getElementById('dashboardSection').style.display = 'block';
+            console.log('Done!');
+        }
+    </script>
+</body>
+</html>

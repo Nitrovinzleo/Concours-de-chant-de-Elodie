@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Système de Réservation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .dashboard-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+        .event-card {
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .event-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+        }
+        .seat-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .seat-available { background-color: #28a745; }
+        .seat-limited { background-color: #ffc107; }
+        .seat-full { background-color: #dc3545; }
+        .navbar {
+            background: rgba(255, 255, 255, 0.1) !important;
+            backdrop-filter: blur(10px);
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        .notification-toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-calendar-check"></i> EventReserve Pro
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3 text-white">
+                    <i class="fas fa-user"></i> <span id="userName">Chargement...</span>
+                </span>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i> Déconnexion
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Dashboard -->
+    <div class="container mt-4">
+        <!-- Stats Section -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3><i class="fas fa-calendar-alt"></i></h3>
+                    <h4 id="totalEvents">0</h4>
+                    <p>Événements</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3><i class="fas fa-ticket-alt"></i></h3>
+                    <h4 id="myBookings">0</h4>
+                    <p>Mes Réservations</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3><i class="fas fa-users"></i></h3>
+                    <h4 id="totalSeats">0</h4>
+                    <p>Places Totales</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card text-center">
+                    <h3><i class="fas fa-check-circle"></i></h3>
+                    <h4 id="availableSeats">0</h4>
+                    <p>Places Disponibles</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="dashboard-container p-4 mb-4">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Rechercher un événement...">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="categoryFilter">
+                        <option value="">Toutes catégories</option>
+                        <option value="conference">Conférence</option>
+                        <option value="concert">Concert</option>
+                        <option value="workshop">Atelier</option>
+                        <option value="meetup">Meetup</option>
+                        <option value="other">Autre</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="btn-group w-100">
+                        <button class="btn btn-primary" onclick="showMyBookings()">
+                            <i class="fas fa-ticket-alt"></i> Mes réservations
+                        </button>
+                        <button class="btn btn-success" onclick="refreshEvents()">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Events Grid -->
+        <div class="dashboard-container p-4">
+            <h3 class="mb-4">
+                <i class="fas fa-calendar"></i> Événements Disponibles
+            </h3>
+            <div id="eventsGrid" class="row">
+                <!-- Events will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- My Bookings Modal -->
+    <div class="modal fade" id="bookingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-ticket-alt"></i> Mes réservations
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="bookingsList">
+                        <!-- Bookings will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notificationToast" class="notification-toast toast" role="alert">
+        <div class="toast-header">
+            <strong class="me-auto">Notification</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        class DashboardApp {
+            constructor() {
+                this.token = localStorage.getItem('token');
+                this.user = JSON.parse(localStorage.getItem('user') || '{}');
+                this.socket = null;
+                this.currentEvents = [];
+                
+                if (!this.token) {
+                    window.location.href = '/';
+                    return;
+                }
+                
+                this.init();
+            }
+
+            init() {
+                this.updateUserInfo();
+                this.connectSocket();
+                this.loadEvents();
+                this.loadStats();
+                this.setupEventListeners();
+            }
+
+            updateUserInfo() {
+                document.getElementById('userName').textContent = 
+                    this.user.profileData?.firstName || this.user.email;
+            }
+
+            setupEventListeners() {
+                document.getElementById('searchInput').addEventListener('input', () => {
+                    this.loadEvents();
+                });
+
+                document.getElementById('categoryFilter').addEventListener('change', () => {
+                    this.loadEvents();
+                });
+            }
+
+            connectSocket() {
+                this.socket = io();
+                
+                this.socket.on('seat-update', (data) => {
+                    this.updateEventSeats(data.eventId, data.availableSeats);
+                    this.loadStats();
+                });
+
+                this.socket.on('booking-confirmed', (data) => {
+                    if (data.userId === this.user.id) {
+                        this.showNotification('Votre réservation a été confirmée!', 'success');
+                        this.loadEvents();
+                        this.loadStats();
+                    }
+                });
+            }
+
+            async loadEvents() {
+                const search = document.getElementById('searchInput').value;
+                const category = document.getElementById('categoryFilter').value;
+                
+                let url = '/api/events?';
+                if (search) url += `search=${encodeURIComponent(search)}&`;
+                if (category) url += `category=${category}&`;
+
+                try {
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.currentEvents = data.events;
+                        this.renderEvents(data.events);
+                    } else {
+                        this.showNotification('Erreur lors du chargement des événements', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('Erreur lors du chargement des événements', 'error');
+                }
+            }
+
+            async loadStats() {
+                try {
+                    const response = await fetch('/api/events');
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        const events = data.events;
+                        const totalEvents = events.length;
+                        const totalSeats = events.reduce((sum, e) => sum + e.capacity, 0);
+                        const availableSeats = events.reduce((sum, e) => sum + e.availableSeats, 0);
+                        
+                        document.getElementById('totalEvents').textContent = totalEvents;
+                        document.getElementById('totalSeats').textContent = totalSeats;
+                        document.getElementById('availableSeats').textContent = availableSeats;
+                        
+                        // Load user bookings
+                        const bookingsResponse = await fetch('/api/bookings', {
+                            headers: { 'Authorization': `Bearer ${this.token}` }
+                        });
+                        const bookingsData = await bookingsResponse.json();
+                        if (bookingsResponse.ok) {
+                            document.getElementById('myBookings').textContent = bookingsData.total;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading stats:', error);
+                }
+            }
+
+            renderEvents(events) {
+                const grid = document.getElementById('eventsGrid');
+                
+                if (events.length === 0) {
+                    grid.innerHTML = `
+                        <div class="col-12 text-center py-5">
+                            <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                            <h4 class="text-muted">Aucun événement trouvé</h4>
+                            <p class="text-muted">Essayez de modifier vos filtres de recherche</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                grid.innerHTML = events.map(event => {
+                    const seatStatus = this.getSeatStatus(event.availableSeats, event.capacity);
+                    const eventDate = new Date(event.datetime);
+                    const isFull = event.availableSeats === 0;
+                    
+                    return `
+                        <div class="col-md-6 col-lg-4 mb-4">
+                            <div class="card event-card h-100">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="card-title">${event.title}</h5>
+                                        <span class="badge bg-secondary">${this.getCategoryLabel(event.category)}</span>
+                                    </div>
+                                    
+                                    <p class="card-text">
+                                        <i class="fas fa-map-marker-alt text-muted"></i> ${event.location}<br>
+                                        <i class="fas fa-clock text-muted"></i> ${eventDate.toLocaleString('fr-FR')}<br>
+                                        <i class="fas fa-users text-muted"></i> 
+                                        <span class="seat-indicator ${seatStatus.class}"></span>
+                                        ${event.availableSeats}/${event.capacity} places
+                                    </p>
+                                    
+                                    ${event.description ? `<p class="card-text text-muted">${event.description.substring(0, 100)}...</p>` : ''}
+                                    
+                                    ${event.price > 0 ? `<p class="card-text"><strong>${event.price}€</strong></p>` : ''}
+                                    
+                                    <div class="d-grid gap-2">
+                                        <button class="btn ${isFull ? 'btn-secondary' : 'btn-primary'}" 
+                                                onclick="app.bookEvent('${event._id}')"
+                                                ${isFull ? 'disabled' : ''}>
+                                            ${isFull ? 'Complet' : 'Réserver'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            getSeatStatus(available, total) {
+                const percentage = (available / total) * 100;
+                
+                if (percentage === 0) {
+                    return { class: 'seat-full', text: 'Complet' };
+                } else if (percentage < 20) {
+                    return { class: 'seat-limited', text: 'Places limitées' };
+                } else {
+                    return { class: 'seat-available', text: 'Disponible' };
+                }
+            }
+
+            getCategoryLabel(category) {
+                const labels = {
+                    'conference': 'Conférence',
+                    'concert': 'Concert',
+                    'workshop': 'Atelier',
+                    'meetup': 'Meetup',
+                    'other': 'Autre'
+                };
+                return labels[category] || category;
+            }
+
+            async bookEvent(eventId) {
+                try {
+                    const response = await fetch('/api/bookings', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${this.token}`
+                        },
+                        body: JSON.stringify({ eventId })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        this.showNotification(`Réservation confirmée! Code: ${data.confirmation}`, 'success');
+                        this.loadEvents();
+                        this.loadStats();
+                        
+                        if (this.socket) {
+                            this.socket.emit('join-event', eventId);
+                        }
+                    } else {
+                        this.showNotification(data.message || 'Erreur de réservation', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('Erreur de réservation', 'error');
+                }
+            }
+
+            updateEventSeats(eventId, availableSeats) {
+                const event = this.currentEvents.find(e => e._id == eventId);
+                if (event) {
+                    event.availableSeats = availableSeats;
+                    this.renderEvents(this.currentEvents);
+                }
+            }
+
+            async showMyBookings() {
+                try {
+                    const response = await fetch('/api/bookings', {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        this.renderBookings(data.bookings);
+                        const modal = new bootstrap.Modal(document.getElementById('bookingsModal'));
+                        modal.show();
+                    } else {
+                        this.showNotification('Erreur lors du chargement des réservations', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('Erreur lors du chargement des réservations', 'error');
+                }
+            }
+
+            renderBookings(bookings) {
+                const list = document.getElementById('bookingsList');
+                
+                if (bookings.length === 0) {
+                    list.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-ticket-alt fa-2x text-muted mb-3"></i>
+                            <p class="text-muted">Aucune réservation trouvée</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                list.innerHTML = bookings.map(booking => {
+                    const eventDate = new Date(booking.event.datetime);
+                    const statusClass = booking.status === 'confirmed' ? 'success' : 
+                                       booking.status === 'waitlist' ? 'warning' : 'secondary';
+                    
+                    return `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-8">
+                                        <h6 class="card-title">${booking.event.title}</h6>
+                                        <p class="card-text mb-1">
+                                            <i class="fas fa-map-marker-alt text-muted"></i> ${booking.event.location}<br>
+                                            <i class="fas fa-clock text-muted"></i> ${eventDate.toLocaleString('fr-FR')}<br>
+                                            <i class="fas fa-ticket-alt text-muted"></i> Code: <strong>${booking.confirmationCode}</strong>
+                                        </p>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <span class="badge bg-${statusClass} mb-2">
+                                            ${booking.status === 'confirmed' ? 'Confirmée' : 
+                                              booking.status === 'waitlist' ? 'Liste d\'attente' : 'Annulée'}
+                                        </span><br>
+                                        ${booking.status === 'confirmed' ? 
+                                            `<button class="btn btn-sm btn-outline-danger" onclick="app.cancelBooking('${booking._id}')">
+                                                Annuler
+                                            </button>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            async cancelBooking(bookingId) {
+                if (!confirm('Êtes-vous sûr de vouloir annuler cette réservation?')) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        this.showNotification('Réservation annulée avec succès', 'success');
+                        this.showMyBookings();
+                        this.loadEvents();
+                        this.loadStats();
+                    } else {
+                        this.showNotification(data.message || 'Erreur d\'annulation', 'error');
+                    }
+                } catch (error) {
+                    this.showNotification('Erreur d\'annulation', 'error');
+                }
+            }
+
+            refreshEvents() {
+                this.loadEvents();
+                this.loadStats();
+                this.showNotification('Événements actualisés', 'info');
+            }
+
+            showNotification(message, type = 'info') {
+                const toast = document.getElementById('notificationToast');
+                const toastMessage = document.getElementById('toastMessage');
+                
+                toastMessage.textContent = message;
+                toast.className = `notification-toast toast bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'}`;
+                
+                const toastElement = new bootstrap.Toast(toast);
+                toastElement.show();
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/';
+        }
+
+        function refreshEvents() {
+            if (window.app) {
+                window.app.refreshEvents();
+            }
+        }
+
+        function showMyBookings() {
+            if (window.app) {
+                window.app.showMyBookings();
+            }
+        }
+
+        // Initialize the app
+        const app = new DashboardApp();
+        window.app = app;
+    </script>
+</body>
+</html>
