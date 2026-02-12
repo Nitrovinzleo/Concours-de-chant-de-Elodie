@@ -35,6 +35,25 @@ const eventSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  venue: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Venue'
+  },
+  seatMap: {
+    rows: { type: Number, default: 10 },
+    seatsPerRow: { type: Number, default: 20 },
+    seatCategories: [{
+      name: { type: String, required: true },
+      price: { type: Number, required: true },
+      rows: [{ type: Number }],
+      color: { type: String, default: '#28a745' }
+    }]
+  },
+  bookedSeats: [{
+    seatNumber: { type: String, required: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    bookingDate: { type: Date, default: Date.now }
+  }],
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
