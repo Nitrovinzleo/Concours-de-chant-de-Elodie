@@ -7,42 +7,168 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        :root {
+            --color-primary: #7C3AED;   /* violet moyen */
+            --color-secondary: #A855F7; /* lavande */
+            --color-violet-soft: #E9D5FF; /* violet pâle */
+            --color-accent: #EABF7A;    /* beige doré plus intense */
+            --color-beige-soft: #F8E7CF; /* beige clair */
+            --color-beige-strong: #F3D3A1; /* beige soutenu */
+            --color-danger: #E11D48;    /* framboise douce */
+            --color-bg: #F5E3C6;        /* fond beige plus marqué */
+            --color-surface: #FFFFFF;   /* cartes */
+            --color-border: #E2C8A4;
+            --color-text-main: #1F2933;
+            --color-text-muted: #6B7280;
+        }
+
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text-main);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
         .event-card {
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 14px;
+            border: 1px solid var(--color-border);
+            background: linear-gradient(145deg, #FFFFFF 0%, #FDF6FF 45%, #FFFFFF 100%);
         }
         .event-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-4px);
+            box-shadow: 0 18px 35px rgba(124, 58, 237, 0.20);
         }
+
         .seat-indicator {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             display: inline-block;
-            margin-right: 5px;
+            margin-right: 6px;
         }
         .seat-available {
-            background-color: #28a745;
+            background-color: #10B981; /* vert sobre */
         }
         .seat-limited {
-            background-color: #ffc107;
+            background-color: var(--color-accent);
         }
         .seat-full {
-            background-color: #dc3545;
+            background-color: var(--color-danger);
         }
+
         .auth-section {
             min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: radial-gradient(
+                circle at top,
+                #C4A5FF 0%,
+                var(--color-violet-soft) 25%,
+                var(--color-beige-soft) 55%,
+                var(--color-bg) 100%
+            );
         }
+
+        .auth-section .card {
+            border-radius: 16px;
+            border: 1px solid var(--color-border);
+            box-shadow: 0 16px 30px rgba(148, 123, 173, 0.18);
+            background: linear-gradient(145deg, #FFFFFF 0%, #FFF7ED 55%, #FFFFFF 100%);
+        }
+
+        .auth-section .card-body {
+            background: linear-gradient(135deg, #FFFDF8 0%, #FFF2E0 45%, #FDF6FF 90%);
+            color: var(--color-text-main);
+        }
+
+        .auth-section .form-control {
+            background-color: #FFF7EB;
+            border-color: var(--color-border);
+            color: var(--color-text-main);
+        }
+        .auth-section .form-control:focus {
+            border-color: var(--color-secondary);
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+        }
+
+        .auth-section .nav-pills .nav-link {
+            border-radius: 999px;
+            color: var(--color-text-muted);
+            background-color: transparent;
+        }
+        .auth-section .nav-pills .nav-link.active {
+            background: linear-gradient(90deg, #7C3AED, #A855F7);
+            color: #FFFFFF;
+            box-shadow: 0 10px 20px rgba(124, 58, 237, 0.30);
+        }
+
         .dashboard-section {
             display: none;
             min-height: 100vh;
-            background-color: #f8f9fa;
+            background-color: var(--color-bg);
         }
+
         .notification-toast {
             position: fixed;
             top: 20px;
             right: 20px;
             z-index: 1050;
+        }
+
+        /* Palette personnalisée sur les composants Bootstrap */
+        .text-primary {
+            color: var(--color-primary) !important;
+        }
+
+        .bg-primary,
+        .navbar-dark.bg-primary {
+            background-color: var(--color-primary) !important;
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            border-color: var(--color-primary);
+            border-radius: 999px;
+            font-weight: 500;
+        }
+        .btn-primary:hover,
+        .btn-primary:focus {
+            background-color: #152844;
+            border-color: #152844;
+        }
+
+        .btn-success {
+            background-color: var(--color-secondary);
+            border-color: var(--color-secondary);
+            border-radius: 999px;
+            font-weight: 500;
+        }
+        .btn-success:hover,
+        .btn-success:focus {
+            background-color: #35627a;
+            border-color: #35627a;
+        }
+
+        .btn-outline-primary {
+            color: var(--color-primary);
+            border-color: var(--color-primary);
+            border-radius: 999px;
+            font-weight: 500;
+        }
+        .btn-outline-primary:hover,
+        .btn-outline-primary:focus {
+            background-color: var(--color-primary);
+            color: #F9FAFB;
+        }
+
+        .badge.bg-secondary {
+            background-color: rgba(15, 23, 42, 0.08) !important;
+            color: var(--color-primary);
+            border-radius: 999px;
+            font-weight: 500;
+        }
+
+        .navbar-brand,
+        .navbar-text {
+            font-weight: 500;
         }
     </style>
 </head>
